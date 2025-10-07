@@ -16,7 +16,7 @@
 
 #include "nbt.h"
 
-#include <gio/gcancellable.h>
+
 #include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -157,6 +157,8 @@ static int nbt_node_write_nbt (NBT_Buffer *buffer, NbtNode *node,
                                int writekey);
 static int nbt_node_write_list (NBT_Buffer *buffer, NbtNode *node);
 static int nbt_node_write_compound (NBT_Buffer *buffer, NbtNode *node);
+static char *convert_string (const char *str, size_t len);
+static char *convert_string_to_mutf8 (const char *str);
 
 NBT *
 LIBNBT_create_NBT (uint8_t type)
@@ -369,6 +371,9 @@ LIBNBT_getKey (NBT_Buffer *buffer, char **result)
     *result = malloc (len + 1);
     memcpy (*result, buffer->data + buffer->pos, len);
     (*result)[len] = 0;
+    char *new_key = convert_string (*result, len);
+    free (*result);
+    *result = new_key;
     buffer->pos += len;
     return 2 + len;
 }
@@ -402,7 +407,6 @@ parse_value (NbtNode *node, NBT_Buffer *buffer, uint8_t skipkey,
             char *key = NULL;
             if (!LIBNBT_getKey (buffer, &key))
                 return LIBNBT_ERROR_EARLY_EOF;
-            ;
             data->key = key;
         }
 
@@ -481,6 +485,9 @@ parse_value (NbtNode *node, NBT_Buffer *buffer, uint8_t skipkey,
                 memcpy (data->value_a.value, buffer->data + buffer->pos, len);
                 char *value = data->value_a.value;
                 value[len] = 0;
+                char *new_value = convert_string (value, strlen (value));
+                free (data->value_a.value);
+                data->value_a.value = new_value;
                 buffer->pos += len;
                 break;
             }
@@ -1681,7 +1688,7 @@ nbt_data_free (NbtNode *node)
         case TAG_String:
             if (data->value_a.value != NULL)
                 {
-                    free (data->value_a.value);
+                    g_free (data->value_a.value);
                 }
             break;
         default:
@@ -1759,21 +1766,25 @@ LIBNBT_nbt_write_key (NBT_Buffer *buffer, char *key, int type)
         }
     if (key && key[0])
         {
-            int len = strlen (key);
+            char* new_key = convert_string_to_mutf8 (key);
+            int len = strlen (new_key);
             ret = LIBNBT_writeUint16 (buffer, len);
             if (!ret)
                 {
+                    g_free(new_key);
                     return LIBNBT_ERROR_BUFFER_OVERFLOW;
                 }
             int i;
             for (i = 0; i < len; i++)
                 {
-                    ret = LIBNBT_writeUint8 (buffer, key[i]);
+                    ret = LIBNBT_writeUint8 (buffer, new_key[i]);
                     if (!ret)
                         {
+                            g_free(new_key);
                             return LIBNBT_ERROR_BUFFER_OVERFLOW;
                         }
                 }
+            g_free(new_key);
         }
     else
         {
@@ -1902,32 +1913,34 @@ LIBNBT_nbt_write_string (NBT_Buffer *buffer, void *value, int32_t len,
                          char *key)
 {
     int ret;
-
-    ret = LIBNBT_writeUint16 (buffer, len - 1);
+    char *str = value;
+    char *output_value = convert_string_to_mutf8 (str);
+    int real_len = strlen (output_value);
+    ret = LIBNBT_writeUint16 (buffer, real_len);
     if (!ret)
-        {
-            return LIBNBT_ERROR_BUFFER_OVERFLOW;
-        }
+        goto buffer_overflow_return;
     int i;
     for (i = 0; i < len - 1; i++)
         {
-            ret = LIBNBT_writeUint8 (buffer, ((uint8_t *)value)[i]);
+            ret = LIBNBT_writeUint8 (buffer, ((uint8_t *)output_value)[i]);
             if (!ret)
-                {
-                    return LIBNBT_ERROR_BUFFER_OVERFLOW;
-                }
+                goto buffer_overflow_return;
         }
     if (!ret)
-        {
-            return LIBNBT_ERROR_BUFFER_OVERFLOW;
-        }
+        goto buffer_overflow_return;
+    g_free(output_value);
     return 0;
+buffer_overflow_return:
+    g_free (output_value);
+    return LIBNBT_ERROR_BUFFER_OVERFLOW;
 }
 
 static int
 nbt_node_write_nbt (NBT_Buffer *buffer, NbtNode *node, int writekey)
 {
     int ret = 0;
+    if (!node)
+        return LIBNBT_ERROR_INTERNAL;
     NbtData *data = node->data;
     if (writekey)
         {
@@ -1988,6 +2001,76 @@ nbt_node_write_compound (NBT_Buffer *buffer, NbtNode *node)
     if (!ret)
         return LIBNBT_ERROR_BUFFER_OVERFLOW;
     return 0;
+}
+
+static int
+skip_len (const char *str)
+{
+    if ((gint8)*str > 0)
+        return 1;
+    else if ((*str & 0xe0) == 0xe0)
+        return 3;
+    else if ((*str & 0xc0) == 0xc0)
+        return 2;
+}
+
+static char *
+convert_string (const char *str, size_t len)
+{
+    if (!str)
+        return NULL;
+    guint16 *utf16 = g_new0 (guint16, len + 1);
+    int i = 0;
+    for (; *str; str = str + skip_len (str), i++)
+        {
+            int skip_len_tmp = skip_len (str);
+            guint16 c = 0;
+            if (skip_len_tmp == 1)
+                c = (guint8)*str;
+            else if (skip_len_tmp == 2)
+                c = ((str[0] & 0x1f) << 6) + (str[1] & 0x3f);
+            else
+                c = ((str[0] & 0xf) << 12) + ((str[1] & 0x3f) << 6)
+                    + (str[2] & 0x3f);
+            utf16[i] = c;
+        }
+    utf16[i] = 0;
+    char *utf8 = g_utf16_to_utf8 (utf16, len, NULL, NULL, NULL);
+    g_free (utf16);
+    return utf8;
+}
+
+static char *
+convert_string_to_mutf8 (const char *str)
+{
+    if (!str)
+        return NULL;
+    GString *string = g_string_new (NULL);
+    for (; *str; str = g_utf8_next_char (str))
+        {
+            gunichar c = g_utf8_get_char (str);
+            if (c < 65536)
+                g_string_append_unichar (string, c);
+            else
+                {
+                    int more_val = 0x10000;
+                    c = c - more_val;
+                    uint8_t temp[7];
+                    int hi = (1 << 20) - 1 - ((1 << 10) - 1);
+                    guint hipos = (c & hi) >> 10;
+                    int mid3 = 0x3c0;
+                    int mid4 = 0x3f;
+                    temp[0] = 0b11101101;
+                    temp[1] = 0b10100000 + (hipos & mid3);
+                    temp[2] = 0b10000000 + (hipos & mid4);
+                    temp[3] = temp[0];
+                    temp[4] = 0b10110000 + (c & mid3);
+                    temp[5] = 0b10000000 + (c & mid4);
+                    temp[6] = 0;
+                    g_string_append (string, temp);
+                }
+        }
+    return g_string_free_and_steal (string);
 }
 
 int
@@ -2228,8 +2311,7 @@ nbt_node_pack_opt (NbtNode *node, uint8_t *buffer, size_t *length,
             uint8_t *tempbuf = malloc (len);
             buf = init_buffer (tempbuf, len);
         }
-    int ret;
-    ret = nbt_node_write_nbt (buf, node, 1);
+    int ret = nbt_node_write_nbt (buf, node, 1);
     LIBNBT_fill_err (errid, ret, buf->pos);
 
     if (compression == NBT_Compression_NONE)
