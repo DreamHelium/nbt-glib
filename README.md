@@ -1,6 +1,9 @@
-# libnbt
+[中文文档](README_zh.md)
 
-Lightweight Minecraft NBT/MCA/SNBT file parser in C.
+# nbt-glib
+
+Originally this repository was forked from `djytw`'s `libnbt`, but it will be rewritten by using the `GLib`'s `GNode`
+and other functions.
 
 ## Usage
 
