@@ -36,18 +36,18 @@ G_BEGIN_DECLS
  */
 typedef enum
 {
-    /** The loading text is not a valid NBT */
-    NBT_GLIB_PARSE_ERROR_INTERRUPTED,
-    /** Uncompress error */
-    NBT_GLIB_PARSE_ERROR_UNCOMPRESS_ERROR,
-    /** After parsing, some data is leftover */
-    NBT_GLIB_PARSE_ERROR_LEFTOVER_DATA,
-    /** Internal Error */
-    NBT_GLIB_PARSE_ERROR_INTERNAL,
-    /** Parse cancelled */
-    NBT_GLIB_PARSE_ERROR_CANCELLED,
-    /** Invalid tag */
-    NBT_GLIB_PARSE_ERROR_INVALID_TAG,
+  /** The loading text is not a valid NBT */
+  NBT_GLIB_PARSE_ERROR_INTERRUPTED,
+  /** Uncompress error */
+  NBT_GLIB_PARSE_ERROR_UNCOMPRESS_ERROR,
+  /** After parsing, some data is leftover */
+  NBT_GLIB_PARSE_ERROR_LEFTOVER_DATA,
+  /** Internal Error */
+  NBT_GLIB_PARSE_ERROR_INTERNAL,
+  /** Parse cancelled */
+  NBT_GLIB_PARSE_ERROR_CANCELLED,
+  /** Invalid tag */
+  NBT_GLIB_PARSE_ERROR_INVALID_TAG,
 } NbtGlibParseError;
 
 /**
@@ -56,19 +56,19 @@ typedef enum
  */
 typedef enum NBT_Tags
 {
-    TAG_End,
-    TAG_Byte,
-    TAG_Short,
-    TAG_Int,
-    TAG_Long,
-    TAG_Float,
-    TAG_Double,
-    TAG_Byte_Array,
-    TAG_String,
-    TAG_List,
-    TAG_Compound,
-    TAG_Int_Array,
-    TAG_Long_Array
+  TAG_End,
+  TAG_Byte,
+  TAG_Short,
+  TAG_Int,
+  TAG_Long,
+  TAG_Float,
+  TAG_Double,
+  TAG_Byte_Array,
+  TAG_String,
+  TAG_List,
+  TAG_Compound,
+  TAG_Int_Array,
+  TAG_Long_Array
 } NBT_Tags;
 
 /**
@@ -76,54 +76,54 @@ typedef enum NBT_Tags
  */
 typedef struct NbtData
 {
-    /** NBT tag. see `NBT_Tags` */
-    enum NBT_Tags type;
+  /** NBT tag. see `NBT_Tags` */
+  enum NBT_Tags type;
 
-    /** NBT tag name. Nullable when no name defined. '\0' ended */
-    char *key;
+  /** NBT tag name. Nullable when no name defined. '\0' ended */
+  char *key;
 
-    /** NBT tag data. */
-    union
+  /** NBT tag data. */
+  union
+  {
+
+    /**
+     * @brief Numerical (Integer) data
+     *
+     * Used when tag=[`TAG_Byte`, `TAG_Short`, `TAG_Int`, `TAG_Long`]
+     */
+    int64_t value_i;
+
+    /**
+     * @brief Float data
+     *
+     * Used when tag=[`TAG_Float`, `TAG_Double`] */
+    double value_d;
+
+    /**
+     * @brief Array data
+     *
+     * Used when tag=[`TAG_Byte_Array`, `TAG_Int_Array`,
+     * `TAG_Long_Array`, `TAG_String`]
+     *
+     * When using `TAG_String`, the `len` can be ignored since it might
+     * not be the original len. (Converted from MUTF-8)
+     */
+    struct
     {
-
-        /**
-         * @brief Numerical (Integer) data
-         *
-         * Used when tag=[`TAG_Byte`, `TAG_Short`, `TAG_Int`, `TAG_Long`]
-         */
-        int64_t value_i;
-
-        /**
-         * @brief Float data
-         *
-         * Used when tag=[`TAG_Float`, `TAG_Double`] */
-        double value_d;
-
-        /**
-         * @brief Array data
-         *
-         * Used when tag=[`TAG_Byte_Array`, `TAG_Int_Array`,
-         * `TAG_Long_Array`, `TAG_String`]
-         *
-         * When using `TAG_String`, the `len` can be ignored since it might
-         * not be the original len. (Converted from MUTF-8)
-         */
-        struct
-        {
-            /**
-             * @brief Array data
-             *
-             * Note that the data is converted to UTF-8 from MUTF-8 when
-             * it's `TAG_String`
-             */
-            void *value;
-            /**
-             * @brief Array length, or a useless value when it's a
-             * `TAG_String`.
-             */
-            int32_t len;
-        } value_a;
-    };
+      /**
+       * @brief Array data
+       *
+       * Note that the data is converted to UTF-8 from MUTF-8 when
+       * it's `TAG_String`
+       */
+      void *value;
+      /**
+       * @brief Array length, or a useless value when it's a
+       * `TAG_String`.
+       */
+      int32_t len;
+    } value_a;
+  };
 } NbtData;
 
 /**
@@ -140,6 +140,11 @@ typedef GNode NbtNode;
 typedef void (*DhProgressFullSet) (void *klass, int value,
                                    const char *message);
 
+NbtNode *nbt_node_new_from_filename (const char *filename, GError **err,
+                                     DhProgressFullSet set_func,
+                                     void *main_klass,
+                                     GCancellable *cancellable, int min,
+                                     int max);
 /**
  * @brief Create a new NBT node from data
  * @param data The original data of NBT
