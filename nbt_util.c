@@ -147,7 +147,7 @@ fill_failed (gboolean *failed, gboolean value)
 }
 
 gint8
-nbt_node_get_byte (NbtNode *node, gboolean *failed)
+nbt_node_get_byte (const NbtNode *node, gboolean *failed)
 {
   if (!node)
     goto fail;
@@ -163,7 +163,7 @@ fail:
 }
 
 gint16
-nbt_node_get_short (NbtNode *node, gboolean *failed)
+nbt_node_get_short (const NbtNode *node, gboolean *failed)
 {
   if (!node)
     goto fail;
@@ -179,7 +179,7 @@ fail:
 }
 
 gint32
-nbt_node_get_int (NbtNode *node, gboolean *failed)
+nbt_node_get_int (const NbtNode *node, gboolean *failed)
 {
   if (!node)
     goto fail;
@@ -195,7 +195,7 @@ fail:
 }
 
 gint64
-nbt_node_get_long (NbtNode *node, gboolean *failed)
+nbt_node_get_long (const NbtNode *node, gboolean *failed)
 {
   if (!node)
     goto fail;
@@ -211,7 +211,7 @@ fail:
 }
 
 float
-nbt_node_get_float (NbtNode *node, gboolean *failed)
+nbt_node_get_float (const NbtNode *node, gboolean *failed)
 {
   if (!node)
     goto fail;
@@ -227,7 +227,7 @@ fail:
 }
 
 double
-nbt_node_get_double (NbtNode *node, gboolean *failed)
+nbt_node_get_double (const NbtNode *node, gboolean *failed)
 {
   if (!node)
     goto fail;
@@ -243,7 +243,7 @@ fail:
 }
 
 const char *
-nbt_node_get_string (NbtNode *node, gboolean *failed)
+nbt_node_get_string (const NbtNode *node, gboolean *failed)
 {
   if (!node)
     goto fail;
@@ -259,7 +259,7 @@ fail:
 }
 
 const gint8 *
-nbt_node_get_byte_array (NbtNode *node, int *len, gboolean *failed)
+nbt_node_get_byte_array (const NbtNode *node, int *len, gboolean *failed)
 {
   if (!node || !len)
     goto fail;
@@ -276,7 +276,7 @@ fail:
 }
 
 const gint32 *
-nbt_node_get_int_array (NbtNode *node, int *len, gboolean *failed)
+nbt_node_get_int_array (const NbtNode *node, int *len, gboolean *failed)
 {
   if (!node || !len)
     goto fail;
@@ -293,7 +293,7 @@ fail:
 }
 
 const gint64 *
-nbt_node_get_long_array (NbtNode *node, int *len, gboolean *failed)
+nbt_node_get_long_array (const NbtNode *node, int *len, gboolean *failed)
 {
   if (!node || !len)
     goto fail;
@@ -307,6 +307,30 @@ nbt_node_get_long_array (NbtNode *node, int *len, gboolean *failed)
 fail:
   fill_failed (failed, TRUE);
   return NULL;
+}
+
+const char *
+nbt_node_get_key (const NbtNode *node)
+{
+  g_return_val_if_fail (node, NULL);
+  NbtData *data = node->data;
+  return data->key;
+}
+
+void
+nbt_node_reset_key (const NbtNode *node, const char *key)
+{
+  g_return_if_fail (node);
+  if (node->parent)
+    {
+      NbtNode *parent = node->parent;
+      NbtData *data = parent->data;
+      g_return_if_fail (data->type != TAG_List);
+    }
+
+  NbtData *data = node->data;
+  g_free (data->key);
+  data->key = g_strdup (key);
 }
 
 gboolean
@@ -463,36 +487,46 @@ static gpointer
 copy_func (gconstpointer src, gpointer data)
 {
   const NbtData *src_data = src;
+  NbtData *new_data = g_new0 (NbtData, 1);
+  new_data->key = g_strdup (src_data->key);
+  new_data->type = src_data->type;
+  int type_len = 0;
   switch (src_data->type)
     {
     case TAG_Byte:
-      return nbt_node_new_byte (src_data->key, src_data->value_i);
     case TAG_Short:
-      return nbt_node_new_short (src_data->key, src_data->value_i);
     case TAG_Int:
-      return nbt_node_new_int (src_data->key, src_data->value_i);
     case TAG_Long:
-      return nbt_node_new_long (src_data->key, src_data->value_i);
+      new_data->value_i = src_data->value_i;
+      return new_data;
     case TAG_Float:
-      return nbt_node_new_float (src_data->key, src_data->value_d);
     case TAG_Double:
-      return nbt_node_new_double (src_data->key, src_data->value_d);
-    case TAG_String:
-      return nbt_node_new_string (src_data->key, src_data->value_a.value);
+      new_data->value_d = src_data->value_d;
+      return new_data;
     case TAG_Compound:
-      return nbt_node_new_compound (src_data->key);
     case TAG_List:
-      return nbt_node_new_list (src_data->key);
+      return new_data;
+    case TAG_String:
+      new_data->value_a.value = g_strdup (src_data->value_a.value);
+      new_data->value_a.len = src_data->value_a.len;
+      return new_data;
     case TAG_Byte_Array:
-      return nbt_node_new_byte_array (src_data->key, src_data->value_a.value,
-                                      src_data->value_a.len);
+      type_len = sizeof (gint8);
+      goto copy;
     case TAG_Int_Array:
-      return nbt_node_new_int_array (src_data->key, src_data->value_a.value,
-                                     src_data->value_a.len);
+      type_len = sizeof (gint32);
+      goto copy;
     case TAG_Long_Array:
-      return nbt_node_new_long_array (src_data->key, src_data->value_a.value,
-                                      src_data->value_a.len);
+      type_len = sizeof (gint64);
+    copy:
+      new_data->value_a.len = src_data->value_a.len;
+      new_data->value_a.value = g_malloc0 (type_len * src_data->value_a.len);
+      memcpy (new_data->value_a.value, src_data->value_a.value,
+              type_len * src_data->value_a.len);
+      return new_data;
     default:
+      g_free (new_data->key);
+      g_free (new_data);
       return NULL;
     }
 }

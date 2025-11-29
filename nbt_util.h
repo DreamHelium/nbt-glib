@@ -35,19 +35,21 @@ NbtNode *nbt_node_new_int_array (const char *key, gint32 *value, int len);
 NbtNode *nbt_node_new_long_array (const char *key, gint64 *value, int len);
 NbtNode *nbt_node_new_compound (const char *key);
 NbtNode *nbt_node_new_list (const char *key);
-gint8 nbt_node_get_byte (NbtNode *node, gboolean *failed);
-gint16 nbt_node_get_short (NbtNode *node, gboolean *failed);
-gint32 nbt_node_get_int (NbtNode *node, gboolean *failed);
-gint64 nbt_node_get_long (NbtNode *node, gboolean *failed);
-float nbt_node_get_float (NbtNode *node, gboolean *failed);
-double nbt_node_get_double (NbtNode *node, gboolean *failed);
-const char *nbt_node_get_string (NbtNode *node, gboolean *failed);
-const gint8 *nbt_node_get_byte_array (NbtNode *node, int *len,
+gint8 nbt_node_get_byte (const NbtNode *node, gboolean *failed);
+gint16 nbt_node_get_short (const NbtNode *node, gboolean *failed);
+gint32 nbt_node_get_int (const NbtNode *node, gboolean *failed);
+gint64 nbt_node_get_long (const NbtNode *node, gboolean *failed);
+float nbt_node_get_float (const NbtNode *node, gboolean *failed);
+double nbt_node_get_double (const NbtNode *node, gboolean *failed);
+const char *nbt_node_get_string (const NbtNode *node, gboolean *failed);
+const gint8 *nbt_node_get_byte_array (const NbtNode *node, int *len,
                                       gboolean *failed);
-const gint32 *nbt_node_get_int_array (NbtNode *node, int *len,
+const gint32 *nbt_node_get_int_array (const NbtNode *node, int *len,
                                       gboolean *failed);
-const gint64 *nbt_node_get_long_array (NbtNode *node, int *len,
+const gint64 *nbt_node_get_long_array (const NbtNode *node, int *len,
                                        gboolean *failed);
+const char *nbt_node_get_key (const NbtNode *node);
+void nbt_node_reset_key (const NbtNode *node, const char *key);
 gboolean nbt_node_prepend (NbtNode *node, NbtNode *child);
 gboolean nbt_node_append (NbtNode *node, NbtNode *child);
 gboolean nbt_node_insert_before (NbtNode *parent, NbtNode *sibling,
