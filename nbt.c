@@ -54,21 +54,21 @@ static void
 nbt_node_write_uint16_to_gbytearray (GByteArray *buf, uint16_t value)
 {
   guint16 real_value = bswap_16 (value);
-  g_byte_array_append (buf, &real_value, 2);
+  g_byte_array_append (buf, (guint8 *)&real_value, 2);
 }
 
 static void
 nbt_node_write_uint32_to_gbytearray (GByteArray *buf, uint32_t value)
 {
   guint32 real_value = bswap_32 (value);
-  g_byte_array_append (buf, &real_value, 4);
+  g_byte_array_append (buf, (guint8 *)&real_value, 4);
 }
 
 static void
 nbt_node_write_uint64_to_gbytearray (GByteArray *buf, uint64_t value)
 {
   guint64 real_value = bswap_64 (value);
-  g_byte_array_append (buf, &real_value, 8);
+  g_byte_array_append (buf, (guint8 *)&real_value, 8);
 }
 
 static void

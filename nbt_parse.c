@@ -716,7 +716,7 @@ nbt_node_new_from_filename (const char *filename, GError **err,
   GFile *file = g_file_new_for_path (filename);
   guint8 *data = NULL;
   gsize len = 0;
-  if (!g_file_load_contents (file, cancellable, &data, &len, NULL,
+  if (!g_file_load_contents (file, cancellable, (char **)&data, &len, NULL,
                              &internal_err))
     {
       if (err)
