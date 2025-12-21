@@ -584,6 +584,7 @@ nbt_node_new_opt (uint8_t *data, size_t length, GError **err,
 {
   NBT_Buffer *buffer;
   GZlibCompressorFormat format;
+  gboolean no_compression = FALSE;
   /* Unzip data */
   if (length > 1 && data[0] == 0x1f && data[1] == 0x8b)
     /* File is Gzip */
@@ -592,84 +593,92 @@ nbt_node_new_opt (uint8_t *data, size_t length, GError **err,
     /* File is Zlib */
     format = G_ZLIB_COMPRESSOR_FORMAT_ZLIB;
   else
-    /* File is raw */
-    format = G_ZLIB_COMPRESSOR_FORMAT_RAW;
+    no_compression = TRUE;
 
-  guint8 *buf_data = g_new0 (uint8_t, length);
-  guint8 *buf_data_p = buf_data;
-  gsize buf_p_len = length;
-  GZlibDecompressor *decompressor = g_zlib_decompressor_new (format);
-  gsize buf_len = length;
-  GConverterResult result = G_CONVERTER_ERROR;
-  clock_t start = clock ();
-  gsize original_len = length;
-  for (; result != G_CONVERTER_FINISHED;)
+  if (!no_compression)
     {
-      if (g_cancellable_is_cancelled (cancellable))
-        break;
-      GError *internal_err = NULL;
-      gsize current_consumed_len = 0;
-      gsize current_write_len = 0;
-      /* The convertion might not be completed */
-      result = g_converter_convert (G_CONVERTER (decompressor), data, length,
-                                    buf_data, buf_len, G_CONVERTER_NO_FLAGS,
-                                    &current_consumed_len, &current_write_len,
-                                    &internal_err);
-      if (set_func && klass)
+      guint8 *buf_data = g_new0 (uint8_t, length);
+      guint8 *buf_data_p = buf_data;
+      gsize buf_p_len = length;
+      GZlibDecompressor *decompressor = g_zlib_decompressor_new (format);
+      gsize buf_len = length;
+      GConverterResult result = G_CONVERTER_ERROR;
+      clock_t start = clock ();
+      gsize original_len = length;
+      for (; result != G_CONVERTER_FINISHED;)
         {
-          clock_t passed_ms = 1000 * (clock () - start) / CLOCKS_PER_SEC;
-          if (passed_ms % 500 == 0)
-            set_func (klass, (original_len - length) * 100 / original_len,
-                      _ ("Decompressing."));
-        }
-      if (result == G_CONVERTER_ERROR)
-        {
-          /* There's no space in buf */
-          if (internal_err->code == G_IO_ERROR_NO_SPACE)
+          if (g_cancellable_is_cancelled (cancellable))
+            break;
+          GError *internal_err = NULL;
+          gsize current_consumed_len = 0;
+          gsize current_write_len = 0;
+          /* The convertion might not be completed */
+          result = g_converter_convert (
+              G_CONVERTER (decompressor), data, length, buf_data, buf_len,
+              G_CONVERTER_NO_FLAGS, &current_consumed_len, &current_write_len,
+              &internal_err);
+          if (set_func && klass)
+            {
+              clock_t passed_ms = 1000 * (clock () - start) / CLOCKS_PER_SEC;
+              if (passed_ms % 500 == 0)
+                set_func (klass, (original_len - length) * 100 / original_len,
+                          _ ("Decompressing."));
+            }
+          if (result == G_CONVERTER_ERROR)
+            {
+              /* There's no space in buf */
+              if (internal_err->code == G_IO_ERROR_NO_SPACE)
+                {
+                  buf_len += 128;
+                  buf_p_len += 128;
+                  buf_data_p = g_realloc (buf_data_p, buf_p_len);
+                  buf_data = buf_data_p + (buf_p_len - buf_len);
+                  g_error_free (internal_err);
+                  continue;
+                }
+              if (err)
+                {
+                  *err = internal_err;
+                  break;
+                }
+            }
+          data += current_consumed_len;
+          length -= current_consumed_len;
+          buf_data += current_write_len;
+          buf_len -= current_write_len;
+          if (buf_len == 0)
             {
               buf_len += 128;
               buf_p_len += 128;
               buf_data_p = g_realloc (buf_data_p, buf_p_len);
               buf_data = buf_data_p + (buf_p_len - buf_len);
-              g_error_free (internal_err);
-              continue;
-            }
-          if (err)
-            {
-              *err = internal_err;
-              break;
             }
         }
-      data += current_consumed_len;
-      length -= current_consumed_len;
-      buf_data += current_write_len;
-      buf_len -= current_write_len;
-      if (buf_len == 0)
+
+      if (err && *err || result == G_CONVERTER_ERROR)
         {
-          buf_len += 128;
-          buf_p_len += 128;
-          buf_data_p = g_realloc (buf_data_p, buf_p_len);
-          buf_data = buf_data_p + (buf_p_len - buf_len);
+          g_free (buf_data_p);
+          return NULL;
+        }
+
+      buffer = init_buffer (buf_data_p, buf_p_len - buf_len);
+
+      /* Cancelled */
+      if (g_cancellable_is_cancelled (cancellable))
+        {
+          g_free (buffer->data);
+          g_free (buffer);
+          g_set_error_literal (err, NBT_GLIB_PARSE_ERROR,
+                               NBT_GLIB_PARSE_ERROR_CANCELLED,
+                               _ ("The parsing progress has been cancelled."));
+          return NULL;
         }
     }
-
-  if (err && *err || result == G_CONVERTER_ERROR)
+  else
     {
-      g_free (buf_data_p);
-      return NULL;
-    }
-
-  buffer = init_buffer (buf_data_p, buf_p_len - buf_len);
-
-  /* Cancelled */
-  if (g_cancellable_is_cancelled (cancellable))
-    {
-      g_free (buffer->data);
-      g_free (buffer);
-      g_set_error_literal (err, NBT_GLIB_PARSE_ERROR,
-                           NBT_GLIB_PARSE_ERROR_CANCELLED,
-                           _ ("The parsing progress has been cancelled."));
-      return NULL;
+      guint8 *data_dup = g_new0 (guint8, length);
+      memcpy (data_dup, data, length);
+      buffer = init_buffer (data_dup, length);
     }
 
   NbtNode *root = create_nbt (TAG_End);
