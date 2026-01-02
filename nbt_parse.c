@@ -580,8 +580,19 @@ parse_value (NbtNode *node, NBT_Buffer *buffer, uint8_t skipkey,
 NbtNode *
 nbt_node_new_opt (uint8_t *data, size_t length, GError **err,
                   DhProgressFullSet set_func, void *klass,
-                  GCancellable *cancellable, int min, int max)
+                  GCancellable *cancellable, int min, int max,
+                  gsize memory_limit)
 {
+  if (memory_limit == 0)
+    /* 4 GiB */
+    memory_limit = (gsize)4 * 1024 * 1024 * 1024;
+  if (length > memory_limit && err)
+    {
+      g_set_error_literal (err, NBT_GLIB_PARSE_ERROR,
+                           NBT_GLIB_PARSE_ERROR_OUT_OF_MEMORY,
+                           _ ("The parsing data is out of memory."));
+      return NULL;
+    }
   NBT_Buffer *buffer;
   GZlibCompressorFormat format;
   gboolean no_compression = FALSE;
@@ -653,7 +664,18 @@ nbt_node_new_opt (uint8_t *data, size_t length, GError **err,
               buf_data_p = g_realloc (buf_data_p, buf_p_len);
               buf_data = buf_data_p + (buf_p_len - buf_len);
             }
+
+          if (buf_p_len > memory_limit)
+            {
+              g_object_unref (decompressor);
+              g_set_error_literal (err, NBT_GLIB_PARSE_ERROR,
+                                   NBT_GLIB_PARSE_ERROR_OUT_OF_MEMORY,
+                                   _ ("Decompressed data is out of memory."));
+              return NULL;
+            }
         }
+
+      g_object_unref (decompressor);
 
       if (err && *err || result == G_CONVERTER_ERROR)
         {
@@ -729,7 +751,7 @@ nbt_node_new_from_filename (const char *filename, GError **err,
       return NULL;
     }
   NbtNode *ret = nbt_node_new_opt (data, len, err, set_func, main_klass,
-                                   cancellable, min, max);
+                                   cancellable, min, max, 0);
   g_object_unref (file);
   g_free (data);
   return ret;
@@ -741,11 +763,11 @@ nbt_node_new_with_progress (uint8_t *data, size_t length,
                             GCancellable *cancellable, int min, int max)
 {
   return nbt_node_new_opt (data, length, NULL, set_func, main_klass,
-                           cancellable, min, max);
+                           cancellable, min, max, 0);
 }
 
 NbtNode *
 nbt_node_new (uint8_t *data, size_t length)
 {
-  return nbt_node_new_opt (data, length, NULL, NULL, NULL, NULL, 0, 0);
+  return nbt_node_new_opt (data, length, NULL, NULL, NULL, NULL, 0, 0, 0);
 }

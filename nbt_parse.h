@@ -48,6 +48,8 @@ typedef enum
   NBT_GLIB_PARSE_ERROR_CANCELLED,
   /** Invalid tag */
   NBT_GLIB_PARSE_ERROR_INVALID_TAG,
+  /** Out of memory (of the limit) */
+  NBT_GLIB_PARSE_ERROR_OUT_OF_MEMORY,
 } NbtGlibParseError;
 
 /**
@@ -140,6 +142,34 @@ typedef GNode NbtNode;
 typedef void (*DhProgressFullSet) (void *klass, int value,
                                    const char *message);
 
+/**
+ * @brief The struct of parsing arguments
+ */
+typedef struct NbtParseArg
+{
+  GError **err;
+  DhProgressFullSet set_func;
+  void *klass;
+  GCancellable *cancellable;
+  /* byte */
+  gsize memory_limit;
+} NbtParseArg;
+
+typedef struct NbtParseArgByFilename
+{
+  const char *filename;
+  NbtParseArg *args;
+} NbtParseArgByFilename;
+
+typedef struct NbtParseArgByData
+{
+  guint8 *data;
+  size_t length;
+  NbtParseArg *args;
+} NbtParseArgByData;
+
+NbtNode *nbt_node_new_from_filename_struct (NbtParseArgByFilename *args);
+
 NbtNode *nbt_node_new_from_filename (const char *filename, GError **err,
                                      DhProgressFullSet set_func,
                                      void *main_klass,
@@ -178,11 +208,13 @@ NbtNode *nbt_node_new (guint8 *data, size_t length);
  * @param cancellable Cancellable object
  * @param min The minimum value of the progress
  * @param max The maximum value of the progress
+ * @param memory_limit The memory limit for the NBT in byte.
  * @return The node of the NBT, or NULL when cancelled or failed.
  */
 NbtNode *nbt_node_new_opt (guint8 *data, size_t length, GError **err,
                            DhProgressFullSet set_func, void *klass,
-                           GCancellable *cancellable, int min, int max);
+                           GCancellable *cancellable, int min, int max,
+                           gsize memory_limit);
 /**
  * @brief Free the node.
  * @param node The root node needed to be freed.
